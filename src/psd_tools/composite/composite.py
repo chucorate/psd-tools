@@ -11,6 +11,7 @@ from psd_tools.api.layers import AdjustmentLayer, GroupMixin, Layer
 from psd_tools.api.psd_image import PSDImage
 from psd_tools.api.utils import EXPECTED_CHANNELS
 from psd_tools.composite import paint, utils, vector
+from psd_tools.composite.adjustments import ADJUSTMENT_FUNC
 from psd_tools.composite.blend import BLEND_FUNC, normal
 from psd_tools.composite.effects import draw_stroke_effect
 from psd_tools.constants import BlendMode, ColorMode, Resource, Tag
@@ -279,9 +280,6 @@ class Compositor(object):
         if self._layer_filter is not None and not self._layer_filter(layer):
             logger.debug("Ignore %s" % layer)
             return
-        if isinstance(layer, AdjustmentLayer):
-            logger.debug("Ignore adjustment %s" % layer)
-            return
         if utils.intersect(self._viewport, layer.bbox) == (0, 0, 0, 0):
             logger.debug("Out of viewport %s" % (layer))
             return
@@ -289,7 +287,13 @@ class Compositor(object):
             return
 
         knockout = bool(layer.tagged_blocks.get_data(Tag.KNOCKOUT_SETTING, 0))
-        if isinstance(layer, GroupMixin):
+        if isinstance(layer, AdjustmentLayer):
+            adjustment = ADJUSTMENT_FUNC.get(layer.kind)
+            if adjustment is None:
+                logger.debug("Ignore adjustment %s" % layer)
+                return
+            color, shape, alpha = self._apply_adjustment(layer, adjustment)
+        elif isinstance(layer, GroupMixin):
             color, shape, alpha = self._get_group(layer, knockout)
         else:
             color, shape, alpha = self._get_object(layer)
@@ -460,6 +464,11 @@ class Compositor(object):
         assert alpha is not None
         return color, shape, alpha
 
+    def _apply_adjustment(self, layer: AdjustmentLayer, adjustment_func: Callable) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        color = adjustment_func(layer, self._color)
+
+        return color, self._shape_g, self._alpha_g
+        
     def _apply_clip_layers(
         self, layer: Layer, color: np.ndarray, alpha: np.ndarray
     ) -> np.ndarray:

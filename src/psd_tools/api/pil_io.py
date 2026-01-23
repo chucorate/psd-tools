@@ -315,7 +315,7 @@ def _apply_icc(image: Image.Image, icc_profile: bytes) -> Image.Image:
         with io.BytesIO(icc_profile) as f:
             in_profile = ImageCms.ImageCmsProfile(f)
         out_profile = ImageCms.createProfile("sRGB")
-        outputMode = image.mode if image.mode in ("L", "LA", "RGBA") else "RGB"
+        outputMode = image.mode if image.mode in ("RGBA") else "RGB"
         result = ImageCms.profileToProfile(
             image, in_profile, out_profile, outputMode=outputMode
         )
