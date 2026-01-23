@@ -94,7 +94,7 @@ def test_composite_minimal(filename: str) -> None:
     result = color
     if reference.shape[2] > color.shape[2]:
         result = np.concatenate((color, alpha), axis=2)
-    assert _mse(reference, result) <= 0.017
+    assert _mse(reference, result) <= 0.012
 
 
 @pytest.mark.parametrize(
@@ -254,7 +254,7 @@ def test_composite_group_clipping_clip_studio() -> None:
     result = psd.composite(force=True)
     assert (
         _mse(np.array(reference, dtype=np.float32), np.array(result, dtype=np.float32))
-        <= 0.001
+        <= 0.0001
     )
 
 
@@ -269,13 +269,16 @@ def test_composite_pixel_layer_with_vector_stroke() -> None:
     psd = PSDImage.open(full_name("effects/stroke-without-vector-mask.psd"))
     reference = composite(psd, force=True)
     result = composite(psd)
-    assert _mse(reference[0], result[0]) <= 0.01
+    assert _mse(reference[0], result[0]) <= 0.001
 
 
 adjustment_test_list = [
         ("curves", "rgb"),
         ("curves", "cmyk"),
         ("curves", "grayscale"),
+        ("levels", "rgb"),
+        ("levels", "cmyk"),
+        ("levels", "grayscale"),
     ]
 
 
@@ -284,9 +287,12 @@ def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}"
 
     reference = np.array(Image.open(full_name(filename + ".png")), dtype=np.float32) / 255.0
-    reference = reference[...,:3]
     psd = PSDImage.open(full_name(filename + ".psd"))
     result = np.array(psd.composite(apply_icc=True, force=False), dtype=np.float32) / 255.0
+
+    if result.shape[2] == 3:
+        alpha = np.ones((*result.shape[:2], 1), dtype=result.dtype)
+        result = np.concatenate([result, alpha], axis=2)
 
     assert reference.shape == result.shape
     assert _mse(reference, result) <= 0.0001

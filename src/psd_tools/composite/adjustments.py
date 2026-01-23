@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def apply_curves(layer: Curves, img: np.ndarray) -> np.ndarray:
-    mode = layer._psd.color_mode
-    if mode not in (ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB):
+    mode = _get_mode(layer)
+    if mode is None:
         return img
     
-    info = layer.tagged_blocks.get_data(Tag.CURVES).extra
-    info_dict = {data.channel_id: data.points for data in info}
+    curves_data = layer.extra
+    info_dict = {data.channel_id: data.points for data in curves_data}
 
     size = _get_size(layer)
 
@@ -37,8 +37,45 @@ def apply_curves(layer: Curves, img: np.ndarray) -> np.ndarray:
         y = np.array([p[0] for p in points]) / 255.0
 
         cs = CubicSpline(x, y, bc_type="natural")
+        t = np.linspace(0.0, 1.0, size, dtype=np.float32)
+        lut = cs(t).clip(0.0, 1.0).astype(np.float32)
+
+        luts[channel_id] = lut
+
+    return apply_luts(luts, img, mode)
+
+
+def apply_levels(layer: Levels, img: np.ndarray) -> np.ndarray:
+    mode = _get_mode(layer)
+    if mode is None:
+        return img
+    
+    levels_data = layer.data
+    size = _get_size(layer)
+
+    luts: dict[int, NDArray[np.float32]] = {}
+
+    for channel_id, channel_data in enumerate(levels_data):        
+        in_black: float  = channel_data.input_floor / 255.0
+        in_white: float  = channel_data.input_ceiling / 255.0
+        gamma: float     = channel_data.gamma / 100.0
+        out_black: float = channel_data.output_floor / 255.0
+        out_white: float = channel_data.output_ceiling / 255.0
+
         t = np.linspace(0, 1, size, dtype=np.float32)
-        lut = cs(t).clip(0, 1).astype(np.float32)
+
+        # input adjustments
+        scale = (in_white - in_black) if in_white != in_black else 1.0
+        out = (t - in_black) / scale
+        out = out.clip(0.0, 1.0)
+            
+        # gamma midtone adjustment
+        out = np.power(out, 1.0 / gamma)
+        out = out.clip(0.0, 1.0)
+            
+        # output adjustments
+        out = out * (out_white - out_black) + out_black
+        lut = out.clip(0.0, 1.0).astype(np.float32)
 
         luts[channel_id] = lut
 
@@ -72,8 +109,15 @@ def _get_size(layer: Layer) -> int:
     return min(2**layer._psd.depth, 4096)
 
 
+def _get_mode(layer: Layer) -> Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB] | None:
+    mode = layer._psd.color_mode
+    if mode in (ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB):
+        return mode
+
+
 # wip
 """Adjustment function table."""
 ADJUSTMENT_FUNC = {
+    "levels": apply_levels,
     "curves": apply_curves,
 }
