@@ -449,6 +449,10 @@ class GradientMap(AdjustmentLayer):
     @property
     def gradient_name(self) -> Any:
         return _assert_data(self._data).name.strip("\x00")
+    
+    @property
+    def method(self) -> Any:
+        return _assert_data(self._data).method
 
     @property
     def color_stops(self) -> Any:

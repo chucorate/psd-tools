@@ -294,6 +294,7 @@ class GradientMap(BaseElement):
     .. py:attribute:: is_reversed
     .. py:attribute:: is_dithered
     .. py:attribute:: name
+    .. py:attribute:: method
     .. py:attribute:: color_stops
     .. py:attribute:: transparency_stops
     .. py:attribute:: expansion
