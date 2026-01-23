@@ -273,12 +273,15 @@ def test_composite_pixel_layer_with_vector_stroke() -> None:
 
 
 adjustment_test_list = [
-        ("curves", "rgb"),
-        ("curves", "cmyk"),
-        ("curves", "grayscale"),
         ("levels", "rgb"),
         ("levels", "cmyk"),
         ("levels", "grayscale"),
+        ("curves", "rgb"),
+        ("curves", "cmyk"),
+        ("curves", "grayscale"),
+        ("exposure", "rgb"),
+        ("exposure", "grayscale"),
+        # there's no exposure adjustment for cmyk mode
     ]
 
 
@@ -295,10 +298,10 @@ def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
         result = np.concatenate([result, alpha], axis=2)
 
     assert reference.shape == result.shape
-    assert _mse(reference, result) <= 0.0001
+    assert _mse(reference, result) <= 0.00005
 
 
-@pytest.mark.parametrize( "adjustment, colormode", adjustment_test_list,)
+@pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
 def test_adjustment_composite_error(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}.psd"
     check_composite_quality(filename, 0.0106, False)
