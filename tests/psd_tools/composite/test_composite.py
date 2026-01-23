@@ -291,7 +291,7 @@ def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
 
     reference = np.array(Image.open(full_name(filename + ".png")), dtype=np.float32) / 255.0
     psd = PSDImage.open(full_name(filename + ".psd"))
-    result = np.array(psd.composite(apply_icc=True, force=False), dtype=np.float32) / 255.0
+    result = np.array(psd.composite(apply_icc=True, layer_filter=lambda l: True), dtype=np.float32) / 255.0
 
     if result.shape[2] == 3:
         alpha = np.ones((*result.shape[:2], 1), dtype=result.dtype)

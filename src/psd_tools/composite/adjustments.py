@@ -92,18 +92,20 @@ def apply_exposure(layer: Exposure, img: np.ndarray) -> np.ndarray:
     gamma: float    = layer.gamma
 
     size = _get_size(layer)
-
+    color_gamma = 1.8 if mode == ColorMode.GRAYSCALE else 2.2
     values = np.linspace(0.0, 1.0, size, dtype=np.float32)
 
-    factor = math.pow(2.0, exposure/2.2)
+    factor = math.pow(2.0, exposure/color_gamma)
     lut = (values * factor).clip(0.0, 1.0)
 
-    lut = (np.power(lut, 2.2) + offset).clip(0.0, 1.0)
-    lut = np.power(lut, 1.0/(2.2 * gamma))
+    lut = (np.power(lut, color_gamma) + offset).clip(0.0, 1.0)
+    lut = np.power(lut, 1.0/(color_gamma * gamma))
 
     lut = lut.clip(0.0, 1.0).astype(np.float32)
 
-    return apply_luts({0: lut}, img, mode)
+    channel_id = 1 if mode == ColorMode.GRAYSCALE else 0
+
+    return apply_luts({channel_id: lut}, img, mode)
 
 
 def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, color_mode: ColorMode) -> np.ndarray:
@@ -144,4 +146,5 @@ def _get_mode(layer: Layer) -> Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, Colo
 ADJUSTMENT_FUNC = {
     "levels": apply_levels,
     "curves": apply_curves,
+    "exposure": apply_exposure,
 }

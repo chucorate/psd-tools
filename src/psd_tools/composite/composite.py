@@ -276,11 +276,10 @@ class Compositor(object):
 
     def apply(self, layer: Layer, clip_compositing: bool = False) -> None:
         logger.debug("Compositing %s" % layer)
-
         if self._layer_filter is not None and not self._layer_filter(layer):
             logger.debug("Ignore %s" % layer)
             return
-        if utils.intersect(self._viewport, layer.bbox) == (0, 0, 0, 0):
+        if utils.intersect(self._viewport, layer.bbox) == (0, 0, 0, 0) and not isinstance(layer, AdjustmentLayer):
             logger.debug("Out of viewport %s" % (layer))
             return
         if not clip_compositing and layer.clipping:
@@ -292,11 +291,12 @@ class Compositor(object):
             if adjustment is None:
                 logger.debug("Ignore adjustment %s" % layer)
                 return
-            color, shape, alpha = self._apply_adjustment(layer, adjustment)
+            color, shape, alpha = self._get_adjustment(layer, adjustment)
         elif isinstance(layer, GroupMixin):
             color, shape, alpha = self._get_group(layer, knockout)
         else:
             color, shape, alpha = self._get_object(layer)
+        logger.debug(f"Color dim: {color.ndim}, shape dim: {shape.ndim}, alpha dim: {alpha.ndim}, {color.shape[2]}")
 
         # Composite clip layers.
         if layer.has_clip_layers():
@@ -464,10 +464,14 @@ class Compositor(object):
         assert alpha is not None
         return color, shape, alpha
 
-    def _apply_adjustment(self, layer: AdjustmentLayer, adjustment_func: Callable) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _get_adjustment(
+        self, layer: AdjustmentLayer, adjustment_func: Callable
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         color = adjustment_func(layer, self._color)
+        shape = np.ones((self.height, self.width, 1), dtype=np.float32)
+        alpha = shape.copy()
 
-        return color, self._shape_g, self._alpha_g
+        return color, shape, alpha
         
     def _apply_clip_layers(
         self, layer: Layer, color: np.ndarray, alpha: np.ndarray
