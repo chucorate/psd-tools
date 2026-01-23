@@ -270,3 +270,30 @@ def test_composite_pixel_layer_with_vector_stroke() -> None:
     reference = composite(psd, force=True)
     result = composite(psd)
     assert _mse(reference[0], result[0]) <= 0.01
+
+
+adjustment_test_list = [
+        ("curves", "rgb"),
+        ("curves", "cmyk"),
+        ("curves", "grayscale"),
+    ]
+
+
+@pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
+def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
+    filename = f"adjustments/{adjustment}_{colormode}"
+
+    reference = np.array(Image.open(full_name(filename + ".png")), dtype=np.float32) / 255.0
+    reference = reference[...,:3]
+    psd = PSDImage.open(full_name(filename + ".psd"))
+    result = np.array(psd.composite(apply_icc=True, force=False), dtype=np.float32) / 255.0
+
+    assert reference.shape == result.shape
+    assert _mse(reference, result) <= 0.0001
+
+
+@pytest.mark.parametrize( "adjustment, colormode", adjustment_test_list,)
+def test_adjustment_composite_error(adjustment: str, colormode: str) -> None:
+    filename = f"adjustments/{adjustment}_{colormode}.psd"
+    check_composite_quality(filename, 0.0106, False)
+
