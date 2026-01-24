@@ -15,21 +15,34 @@ from psd_tools.api.adjustments import (
     Levels, 
     Curves, 
     Exposure, 
+<<<<<<< HEAD
     HueSaturation,
     Invert,
     Posterize,
     Threshold,
+=======
+    Invert,
+    Posterize,
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 )
 
 logger = logging.getLogger(__name__)
 
 
+<<<<<<< HEAD
 @require_scipy
 def apply_brightnesscontrast(
     layer: BrightnessContrast, 
     img: np.ndarray,
     colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
 ) -> np.ndarray:
+=======
+def apply_brightnesscontrast(
+        layer: BrightnessContrast, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     use_legacy: bool  = layer.use_legacy
     b: float = layer.brightness / 150.0 
@@ -41,9 +54,13 @@ def apply_brightnesscontrast(
     if use_legacy: # these layers are skipped during composing as they are recognized as PixelLayers with no bounding box
         return img
     
+<<<<<<< HEAD
     # TODO: improve brightness function accuracy
     # the non-legacy adjustment was determined using reverse engineering and tuning parameters, might be slightly off
     # check brightness curve: https://www.desmos.com/calculator/4fg6glxzqj
+=======
+    # the non-legacy adjustment was determined using reverse engineering and tuning parameters, might be slightly off
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
     
     # contrast 
     x = np.array([0.0, 63.0, 191.0, 255.0]) / 255.0
@@ -73,10 +90,17 @@ def apply_brightnesscontrast(
 
 
 def apply_levels(
+<<<<<<< HEAD
     layer: Levels, 
     img: np.ndarray,
     colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
 ) -> np.ndarray:
+=======
+        layer: Levels, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     levels_data = layer.data
     size = _get_mode_info(layer)
@@ -110,12 +134,20 @@ def apply_levels(
     return apply_luts(luts, img, colormode)
 
 
+<<<<<<< HEAD
 @require_scipy
 def apply_curves(
     layer: Curves, 
     img: np.ndarray,
     colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
 ) -> np.ndarray:
+=======
+def apply_curves(
+        layer: Curves, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     curves_data = layer.extra
     info_dict = {data.channel_id: data.points for data in curves_data}
@@ -143,10 +175,17 @@ def apply_curves(
 
 
 def apply_exposure(
+<<<<<<< HEAD
     layer: Exposure, 
     img: np.ndarray, 
     colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
 ) -> np.ndarray:
+=======
+        layer: Exposure, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     exposure: float = layer.exposure
     offset: float   = layer.exposure_offset
@@ -169,6 +208,7 @@ def apply_exposure(
     return apply_luts({channel_id: lut}, img, colormode)
 
 
+<<<<<<< HEAD
 def apply_huesaturation(
     layer: HueSaturation, 
     img: np.ndarray, 
@@ -294,6 +334,8 @@ def _get_huesaturation_range_mask(hue: np.ndarray, color_range: tuple[int]) -> n
     return mask
 
 
+=======
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 def apply_invert(
         layer: Invert, 
         img: np.ndarray, 
@@ -304,10 +346,17 @@ def apply_invert(
 
 
 def apply_posterize(
+<<<<<<< HEAD
     layer: Posterize, 
     img: np.ndarray, 
     colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
 ) -> np.ndarray:
+=======
+        layer: Posterize, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     size = _get_mode_info(layer)
     levels = layer.posterize
@@ -320,6 +369,7 @@ def apply_posterize(
     return apply_luts({channel_id: lut}, img, colormode)
 
 
+<<<<<<< HEAD
 def apply_threshold(
     layer: Threshold, 
     img: np.ndarray, 
@@ -344,6 +394,8 @@ def apply_threshold(
     return filtered
 
 
+=======
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, colormode: ColorMode) -> np.ndarray:
     assert img.ndim == 3
     out = img.copy()
@@ -365,13 +417,21 @@ def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, colormode:
 def _apply_lut(values: np.ndarray, lut: np.ndarray) -> np.ndarray:
     size = lut.shape[0]
 
+<<<<<<< HEAD
     if size <= 2**16:
         depth = size
         values = (np.floor(values * depth) / depth).clip(0.0, 1.0)
+=======
+    if size < 2**16:
+        depth = size
+        values = (np.floor(values * depth) / depth).clip(0.0, 1.0)
+        lut = (np.floor(lut * depth) / depth).clip(0.0, 1.0)
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
     xp = np.linspace(0.0, 1.0, size, dtype=np.float32)
     return np.interp(values, xp, lut).astype(np.float32)
     
+<<<<<<< HEAD
 
 def _get_mode_info(layer: Layer) -> int:
     bits = layer._psd.depth
@@ -391,6 +451,19 @@ def _get_luminance(
     elif colormode == ColorMode.CMYK:
         lab = Image.fromarray((img * 255).astype(np.uint8), "CMYK").convert("LAB")
         return (np.asarray(lab)[..., 0:1] / 255.0).clip(0.0, 1.0) # somewhat inaccurate
+=======
+    x_int = (np.floor(values * depth)).clip(0.0, depth).astype(np.int32)
+    out = (np.floor(lut[x_int] * depth)) / depth
+
+    return out.clip(0.0, 1.0).astype(np.float32)
+
+
+def _get_mode_info(layer: Layer) -> int:
+    bits = layer._psd.depth
+    size = min(2**bits, 65536) 
+    logger.debug(f"Size = {size}")
+    return size 
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
 
 # wip
@@ -400,8 +473,13 @@ ADJUSTMENT_FUNC = {
     "levels": apply_levels,
     "curves": apply_curves,
     "exposure": apply_exposure,
+<<<<<<< HEAD
     "huesaturation": apply_huesaturation,
     "invert": apply_invert,
     "posterize": apply_posterize,
     "threshold": apply_threshold,
+=======
+    "invert": apply_invert,
+    "posterize": apply_posterize,
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 }

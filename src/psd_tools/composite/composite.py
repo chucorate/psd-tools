@@ -2,10 +2,17 @@
 
 import logging
 <<<<<<< HEAD
+<<<<<<< HEAD
 from typing import Callable, Optional, Union, cast, Literal
 =======
 from typing import Callable, cast
 >>>>>>> 00b6d74 (refactor: drop Python <3.11 typing compatibility guards (#575))
+=======
+from typing import Callable, cast
+=======
+from typing import Callable, Optional, Union, cast, Literal
+>>>>>>> fab4a2b (added brightness/contrast, invert & posterize)
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
 
 import numpy as np
 from PIL import Image
@@ -323,7 +330,16 @@ class Compositor(object):
 
         knockout = bool(layer.tagged_blocks.get_data(Tag.KNOCKOUT_SETTING, 0))
         if isinstance(layer, AdjustmentLayer):
+<<<<<<< HEAD
             color, shape, alpha = self._apply_adjustment(layer)
+=======
+            adjustment = ADJUSTMENT_FUNC.get(layer.kind)
+            colormode = self._get_colormode(layer)
+            if adjustment is None or colormode is None:
+                logger.debug("Ignore adjustment %s" % layer)
+                return
+            color, shape, alpha = self._get_adjustment(layer, adjustment, colormode)
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
         elif isinstance(layer, GroupMixin):
             color, shape, alpha = self._get_group(layer, knockout)
         else:
@@ -499,11 +515,25 @@ class Compositor(object):
         assert alpha is not None
         return color, shape, alpha
 
+<<<<<<< HEAD
     def _apply_adjustment(
         self, layer: AdjustmentLayer, 
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         adjustment = ADJUSTMENT_FUNC.get(layer.kind)
         colormode = self._get_colormode(layer)
+=======
+    def _get_adjustment(
+        self, 
+        layer: AdjustmentLayer, 
+        adjustment_func: Callable,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        color = adjustment_func(layer, self._color, colormode)
+        shape = np.ones((self.height, self.width, 1), dtype=np.float32)
+        alpha = shape.copy()
+
+        return color, shape, alpha
+>>>>>>> 798bb69 (added brightness/contrast, invert & posterize)
         
         if adjustment is None or colormode is None:
             logger.debug("Ignore adjustment %s" % layer)
