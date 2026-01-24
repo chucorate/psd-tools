@@ -13,18 +13,66 @@ from psd_tools.api.adjustments import (
     Levels, 
     Curves, 
     Exposure, 
+    Invert,
+    Posterize,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def apply_levels(layer: Levels, img: np.ndarray) -> np.ndarray:
-    mode = _get_mode(layer)
-    if mode is None:
+def apply_brightnesscontrast(
+        layer: BrightnessContrast, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
+    use_legacy: bool  = layer.use_legacy
+    b: float = layer.brightness / 150.0 
+    c: float   = layer.contrast / 100.0
+        
+    size = _get_mode_info(layer)
+    t = np.linspace(0, 1, size, dtype=np.float32)
+        
+    if use_legacy: # these layers are skipped during composing as they are recognized as PixelLayers with no bounding box
         return img
     
+    # the non-legacy adjustment was determined using reverse engineering and tuning parameters, might be slightly off
+    
+    # contrast 
+    x = np.array([0.0, 63.0, 191.0, 255.0]) / 255.0
+    y = np.array([0.0, 63.0 - c * 25.0, 191.0 + c * 25.0, 255.0]) / 255.0
+    contrast_spline = CubicSpline(x, y, bc_type="natural")(t)
+
+    # brightness 
+    a1, a2, a3, a4, a5 = 1.65, -1.0, 1.96, 1.0, 1.00
+    r1, r2, r3, r4, r5 = 0.35, 10.0, 0.4, 4.0, 1.25
+
+    def pol(a,x,r): return a * np.power(x, r)
+
+    h = 0.5 * (abs(b) * (pol(a1,t,r1) +  pol(a2,t,r2)) + (1-abs(b)) * (pol(a3,t,r3) +  pol(a4,t,r4)) + pol(a5,t,r5))
+    brightness_spline = b * t * (1-t) * h
+
+    # a parametric transformation rotates the brightness spline function 45° degrees
+    x_rotated = t - brightness_spline
+    y_rotated = contrast_spline + brightness_spline 
+
+    # interpolate to output {size} points
+    lut = np.interp(t, x_rotated, y_rotated)
+    lut = lut.clip(0.0, 1.0).astype(np.float32)
+
+    channel_id = 1 if colormode == ColorMode.GRAYSCALE else 0
+
+    return apply_luts({channel_id: lut}, img, colormode)
+
+
+def apply_levels(
+        layer: Levels, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
     levels_data = layer.data
-    size = _get_size(layer)
+    size = _get_mode_info(layer)
 
     luts: dict[int, NDArray[np.float32]] = {}
 
@@ -52,18 +100,19 @@ def apply_levels(layer: Levels, img: np.ndarray) -> np.ndarray:
 
         luts[channel_id] = lut
 
-    return apply_luts(luts, img, mode)
+    return apply_luts(luts, img, colormode)
 
 
-def apply_curves(layer: Curves, img: np.ndarray) -> np.ndarray:
-    mode = _get_mode(layer)
-    if mode is None:
-        return img
-    
+def apply_curves(
+        layer: Curves, 
+        img: np.ndarray,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
     curves_data = layer.extra
     info_dict = {data.channel_id: data.points for data in curves_data}
 
-    size = _get_size(layer)
+    size = _get_mode_info(layer)
 
     luts: dict[int, NDArray[np.float32]] = {}
 
@@ -79,20 +128,21 @@ def apply_curves(layer: Curves, img: np.ndarray) -> np.ndarray:
 
         luts[channel_id] = lut
 
-    return apply_luts(luts, img, mode)
+    return apply_luts(luts, img, colormode)
 
 
-def apply_exposure(layer: Exposure, img: np.ndarray) -> np.ndarray:
-    mode = _get_mode(layer)
-    if mode is None:
-        return img
-    
+def apply_exposure(
+        layer: Exposure, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
     exposure: float = layer.exposure
     offset: float   = layer.exposure_offset
     gamma: float    = layer.gamma
 
-    size = _get_size(layer)
-    color_gamma = 1.8 if mode == ColorMode.GRAYSCALE else 2.2
+    size = _get_mode_info(layer)
+    color_gamma = 1.8 if colormode == ColorMode.GRAYSCALE else 2.2
     values = np.linspace(0.0, 1.0, size, dtype=np.float32)
 
     factor = math.pow(2.0, exposure/color_gamma)
@@ -103,15 +153,41 @@ def apply_exposure(layer: Exposure, img: np.ndarray) -> np.ndarray:
 
     lut = lut.clip(0.0, 1.0).astype(np.float32)
 
-    channel_id = 1 if mode == ColorMode.GRAYSCALE else 0
+    channel_id = 1 if colormode == ColorMode.GRAYSCALE else 0
 
-    return apply_luts({channel_id: lut}, img, mode)
+    return apply_luts({channel_id: lut}, img, colormode)
 
 
-def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, color_mode: ColorMode) -> np.ndarray:
+def apply_invert(
+        layer: Invert, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
+    return 1.0 - img
+
+
+def apply_posterize(
+        layer: Posterize, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
+    size = _get_mode_info(layer)
+    levels = layer.posterize
+
+    values = np.linspace(0.0, 1.0, size, dtype=np.float32)
+
+    lut = (np.floor(levels * values) / (levels-1)).astype(np.float32)
+    channel_id = 1 if colormode == ColorMode.GRAYSCALE else 0
+
+    return apply_luts({channel_id: lut}, img, colormode)
+
+
+def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, colormode: ColorMode) -> np.ndarray:
     assert img.ndim == 3
     out = img.copy()
-    n_channels = ColorMode.channels(color_mode)
+    n_channels = ColorMode.channels(colormode)
     channels = range(1, n_channels+1)
     
     # individual adjustments get applied independently of each other, then the master lut its applied if exists
@@ -120,31 +196,43 @@ def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, color_mode
             lut = luts[channel_id]
             out[:, :, channel_id-1] = _apply_lut(img[:, :, channel_id-1], lut)
 
-    if not color_mode == ColorMode.GRAYSCALE and 0 in luts:
+    if not colormode == ColorMode.GRAYSCALE and 0 in luts:
         out = _apply_lut(out, luts[0])
   
     return out
 
 
 def _apply_lut(values: np.ndarray, lut: np.ndarray) -> np.ndarray:
-    xp = np.linspace(0.0, 1.0, lut.shape[0], dtype=np.float32)
+    size = lut.shape[0]
+
+    if size < 2**16:
+        depth = size
+        values = (np.floor(values * depth) / depth).clip(0.0, 1.0)
+        lut = (np.floor(lut * depth) / depth).clip(0.0, 1.0)
+
+    xp = np.linspace(0.0, 1.0, size, dtype=np.float32)
     return np.interp(values, xp, lut).astype(np.float32)
+    
+    x_int = (np.floor(values * depth)).clip(0.0, depth).astype(np.int32)
+    out = (np.floor(lut[x_int] * depth)) / depth
+
+    return out.clip(0.0, 1.0).astype(np.float32)
 
 
-def _get_size(layer: Layer) -> int:
-    return min(2**layer._psd.depth, 4096)
-
-
-def _get_mode(layer: Layer) -> Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB] | None:
-    mode = layer._psd.color_mode
-    if mode in (ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB):
-        return mode
+def _get_mode_info(layer: Layer) -> int:
+    bits = layer._psd.depth
+    size = min(2**bits, 65536) 
+    logger.debug(f"Size = {size}")
+    return size 
 
 
 # wip
 """Adjustment function table."""
 ADJUSTMENT_FUNC = {
+    "brightnesscontrast": apply_brightnesscontrast,
     "levels": apply_levels,
     "curves": apply_curves,
     "exposure": apply_exposure,
+    "invert": apply_invert,
+    "posterize": apply_posterize,
 }

@@ -38,6 +38,21 @@ def check_composite_quality(
     composite_error(psd, threshold, force)
 
 
+def check_icc_composite_quality(
+    filename: str, threshold: float = 0.00005, force: bool = False
+) -> None:
+    reference = np.array(Image.open(full_name(filename + ".png")), dtype=np.float32) / 255.0
+    psd = PSDImage.open(full_name(filename + ".psd"))
+    result = np.array(psd.composite(apply_icc=True, layer_filter=lambda l: l.is_visible(), force=force), dtype=np.float32) / 255.0
+
+    if result.shape[2] == 3:
+        alpha = np.ones((*result.shape[:2], 1), dtype=result.dtype)
+        result = np.concatenate([result, alpha], axis=2)
+
+    assert reference.shape == result.shape
+    assert _mse(reference, result) <= threshold
+
+
 @pytest.mark.parametrize(
     ("filename",),
     [
@@ -226,7 +241,7 @@ def test_group_mask() -> None:
 def test_apply_opacity() -> None:
     psd = PSDImage.open(full_name("opacity-fill.psd"))
     result = composite(psd)
-    assert _mse(psd.numpy("shape"), result[2]) < 0.01
+    assert _mse(psd.numpy("shape"), result[2]) < 0.00001
 
 
 def test_composite_clipping_mask() -> None:
@@ -243,7 +258,7 @@ def test_composite_group_clipping_photoshop() -> None:
     result = psd.composite(force=True)
     assert (
         _mse(np.array(reference, dtype=np.float32), np.array(result, dtype=np.float32))
-        <= 0.001
+        <= 0.00001
     )
 
 
@@ -254,7 +269,7 @@ def test_composite_group_clipping_clip_studio() -> None:
     result = psd.composite(force=True)
     assert (
         _mse(np.array(reference, dtype=np.float32), np.array(result, dtype=np.float32))
-        <= 0.0001
+        <= 0.00001
     )
 
 
@@ -269,10 +284,28 @@ def test_composite_pixel_layer_with_vector_stroke() -> None:
     psd = PSDImage.open(full_name("effects/stroke-without-vector-mask.psd"))
     reference = composite(psd, force=True)
     result = composite(psd)
-    assert _mse(reference[0], result[0]) <= 0.001
+    assert _mse(reference[0], result[0]) <= 0.00001
+
+
+# These tests fail as legacy adjustment layers are recognized as PixelLayers with no bounding box.
+@pytest.mark.parametrize(
+    "adjustment, colormode", 
+    [
+        ("brightnesscontrast_legacy", "rgb"),
+        ("brightnesscontrast_legacy", "cmyk"),
+        ("brightnesscontrast_legacy", "grayscale"),
+    ]
+)
+@pytest.mark.xfail
+def test_legacy_brightnesscontrast(adjustment: str, colormode: str) -> None:
+    filename = f"adjustments/{adjustment}_{colormode}"
+    check_icc_composite_quality(filename, threshold=0.01)
 
 
 adjustment_test_list = [
+        ("brightnesscontrast", "rgb"),
+        ("brightnesscontrast", "cmyk"),
+        ("brightnesscontrast", "grayscale"),
         ("levels", "rgb"),
         ("levels", "cmyk"),
         ("levels", "grayscale"),
@@ -281,28 +314,24 @@ adjustment_test_list = [
         ("curves", "grayscale"),
         ("exposure", "rgb"),
         ("exposure", "grayscale"),
-        # there's no exposure adjustment for cmyk mode
+        # There's no exposure adjustment for cmyk mode
+        ("invert", "rgb"),
+        ("invert", "cmyk"),
+        ("invert", "grayscale"),
+        ("posterize", "rgb"),
+        ("posterize", "cmyk"),
+        ("posterize", "grayscale"),
     ]
 
 
 @pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
 def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}"
-
-    reference = np.array(Image.open(full_name(filename + ".png")), dtype=np.float32) / 255.0
-    psd = PSDImage.open(full_name(filename + ".psd"))
-    result = np.array(psd.composite(apply_icc=True, layer_filter=lambda l: True), dtype=np.float32) / 255.0
-
-    if result.shape[2] == 3:
-        alpha = np.ones((*result.shape[:2], 1), dtype=result.dtype)
-        result = np.concatenate([result, alpha], axis=2)
-
-    assert reference.shape == result.shape
-    assert _mse(reference, result) <= 0.00005
+    check_icc_composite_quality(filename, threshold=0.00008)
 
 
 @pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
 def test_adjustment_composite_error(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}.psd"
-    check_composite_quality(filename, 0.0106, False)
+    check_composite_quality(filename, 0.0005, False)
 

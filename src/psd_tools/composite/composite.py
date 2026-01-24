@@ -1,7 +1,7 @@
 """Composite implementation for layer rendering and blending."""
 
 import logging
-from typing import Callable, Optional, Union, cast
+from typing import Callable, Optional, Union, cast, Literal
 
 import numpy as np
 from PIL import Image
@@ -288,10 +288,11 @@ class Compositor(object):
         knockout = bool(layer.tagged_blocks.get_data(Tag.KNOCKOUT_SETTING, 0))
         if isinstance(layer, AdjustmentLayer):
             adjustment = ADJUSTMENT_FUNC.get(layer.kind)
-            if adjustment is None:
+            colormode = self._get_colormode(layer)
+            if adjustment is None or colormode is None:
                 logger.debug("Ignore adjustment %s" % layer)
                 return
-            color, shape, alpha = self._get_adjustment(layer, adjustment)
+            color, shape, alpha = self._get_adjustment(layer, adjustment, colormode)
         elif isinstance(layer, GroupMixin):
             color, shape, alpha = self._get_group(layer, knockout)
         else:
@@ -465,9 +466,12 @@ class Compositor(object):
         return color, shape, alpha
 
     def _get_adjustment(
-        self, layer: AdjustmentLayer, adjustment_func: Callable
+        self, 
+        layer: AdjustmentLayer, 
+        adjustment_func: Callable,
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        color = adjustment_func(layer, self._color)
+        color = adjustment_func(layer, self._color, colormode)
         shape = np.ones((self.height, self.width, 1), dtype=np.float32)
         alpha = shape.copy()
 
@@ -558,6 +562,13 @@ class Compositor(object):
         alpha = shape * opacity
         return color, shape, alpha
 
+    @staticmethod
+    def _get_colormode(layer: Layer) -> Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB] | None:
+        """Get layer color mode."""
+        colormode = layer._psd.color_mode
+        if colormode in (ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB):
+            return colormode
+    
     def _apply_color_overlay(self, layer, color, shape, alpha):
         for effect in layer.effects.find("coloroverlay"):
             color, shape_e = paint.draw_solid_color_fill(
