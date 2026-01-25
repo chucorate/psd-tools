@@ -321,6 +321,9 @@ adjustment_test_list = [
         ("posterize", "rgb"),
         ("posterize", "cmyk"),
         ("posterize", "grayscale"),
+        ("threshold", "rgb"),
+        ("threshold", "cmyk"),
+        ("threshold", "grayscale"),
     ]
 
 

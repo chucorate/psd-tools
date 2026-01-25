@@ -1,13 +1,15 @@
 import logging
-from typing import Any, Literal
+from typing import Literal
 
-import math
 import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import CubicSpline
+from PIL import Image
 
 from psd_tools.api.layers import Layer
-from psd_tools.constants import Tag, ColorMode
+from psd_tools.constants import ColorMode
+from psd_tools.composite._compat import require_scipy
+from psd_tools.composite.blend import _lum, _cmyk2rgb
 from psd_tools.api.adjustments import (
     BrightnessContrast,
     Levels, 
@@ -15,11 +17,13 @@ from psd_tools.api.adjustments import (
     Exposure, 
     Invert,
     Posterize,
+    Threshold,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@require_scipy
 def apply_brightnesscontrast(
         layer: BrightnessContrast, 
         img: np.ndarray,
@@ -103,6 +107,7 @@ def apply_levels(
     return apply_luts(luts, img, colormode)
 
 
+@require_scipy
 def apply_curves(
         layer: Curves, 
         img: np.ndarray,
@@ -145,7 +150,7 @@ def apply_exposure(
     color_gamma = 1.8 if colormode == ColorMode.GRAYSCALE else 2.2
     values = np.linspace(0.0, 1.0, size, dtype=np.float32)
 
-    factor = math.pow(2.0, exposure/color_gamma)
+    factor = np.pow(2.0, exposure/color_gamma)
     lut = (values * factor).clip(0.0, 1.0)
 
     lut = (np.power(lut, color_gamma) + offset).clip(0.0, 1.0)
@@ -184,6 +189,33 @@ def apply_posterize(
     return apply_luts({channel_id: lut}, img, colormode)
 
 
+def apply_threshold(
+        layer: Threshold, 
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+
+    size = _get_mode_info(layer) - 1 
+    trunc_function = np.round if size < 256 else np.floor
+
+    threshold = (layer.threshold - 1) / 255.0 * size
+    luminance = trunc_function(_get_luminance(img, colormode) * size) 
+    
+    filtered = (luminance > threshold).astype(np.float32) 
+
+    if colormode == ColorMode.CMYK:
+        h, w, _ = filtered.shape
+        out = np.ones((h, w, 4), dtype=np.float32)
+        out[..., 3:4] = 1.0 - filtered
+        return out
+    
+    elif colormode == ColorMode.RGB:
+        out = np.repeat(filtered, 3, axis=2)
+        return out
+    
+    return filtered
+
+
 def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, colormode: ColorMode) -> np.ndarray:
     assert img.ndim == 3
     out = img.copy()
@@ -205,25 +237,32 @@ def apply_luts(luts: dict[int, NDArray[np.float32]], img: np.ndarray, colormode:
 def _apply_lut(values: np.ndarray, lut: np.ndarray) -> np.ndarray:
     size = lut.shape[0]
 
-    if size < 2**16:
+    if size <= 2**16:
         depth = size
         values = (np.floor(values * depth) / depth).clip(0.0, 1.0)
-        lut = (np.floor(lut * depth) / depth).clip(0.0, 1.0)
 
     xp = np.linspace(0.0, 1.0, size, dtype=np.float32)
     return np.interp(values, xp, lut).astype(np.float32)
     
-    x_int = (np.floor(values * depth)).clip(0.0, depth).astype(np.int32)
-    out = (np.floor(lut[x_int] * depth)) / depth
-
-    return out.clip(0.0, 1.0).astype(np.float32)
-
 
 def _get_mode_info(layer: Layer) -> int:
     bits = layer._psd.depth
     size = min(2**bits, 65536) 
     logger.debug(f"Size = {size}")
     return size 
+
+
+def _get_luminance(
+        img: np.ndarray, 
+        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    ) -> np.ndarray:
+    if colormode == ColorMode.RGB:
+        return _lum(img)
+    elif colormode == ColorMode.GRAYSCALE:
+        return img[..., 0:1]
+    elif colormode == ColorMode.CMYK:
+        lab = Image.fromarray((img * 255).astype(np.uint8), "CMYK").convert("LAB")
+        return (np.asarray(lab)[..., 0:1] / 255.0).clip(0.0, 1.0) # somewhat inaccurate
 
 
 # wip
@@ -235,4 +274,5 @@ ADJUSTMENT_FUNC = {
     "exposure": apply_exposure,
     "invert": apply_invert,
     "posterize": apply_posterize,
+    "threshold": apply_threshold,
 }
