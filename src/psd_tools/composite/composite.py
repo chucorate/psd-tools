@@ -1,7 +1,11 @@
 """Composite implementation for layer rendering and blending."""
 
 import logging
+<<<<<<< HEAD
 from typing import Callable, Optional, Union, cast, Literal
+=======
+from typing import Callable, cast
+>>>>>>> 00b6d74 (refactor: drop Python <3.11 typing compatibility guards (#575))
 
 import numpy as np
 from PIL import Image
@@ -20,15 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 def composite_pil(
-    layer: Union[Layer, PSDImage],
-    color: Union[float, tuple[float, ...], np.ndarray],
-    alpha: Union[float, np.ndarray],
-    viewport: Optional[tuple[int, int, int, int]],
-    layer_filter: Optional[Callable],
+    layer: Layer | PSDImage,
+    color: float | tuple[float, ...] | np.ndarray,
+    alpha: float | np.ndarray,
+    viewport: tuple[int, int, int, int] | None,
+    layer_filter: Callable | None,
     force: bool,
     as_layer: bool = False,
     apply_icc: bool = True,
-) -> Union[Image.Image, None]:
+) -> Image.Image | None:
     """
     Composite layers and return a PIL Image.
 
@@ -110,11 +114,11 @@ def composite_pil(
 
 
 def composite(
-    group: Union[Layer, PSDImage],
-    color: Union[float, tuple[float, ...], np.ndarray] = 1.0,
-    alpha: Union[float, np.ndarray] = 0.0,
-    viewport: Optional[tuple[int, int, int, int]] = None,
-    layer_filter: Optional[Callable] = None,
+    group: Layer | PSDImage,
+    color: float | tuple[float, ...] | np.ndarray = 1.0,
+    alpha: float | np.ndarray = 0.0,
+    viewport: tuple[int, int, int, int] | None = None,
+    layer_filter: Callable | None = None,
     force: bool = False,
     as_layer: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -203,7 +207,7 @@ def paste(
     viewport: tuple[int, int, int, int],
     bbox: tuple[int, int, int, int],
     values: np.ndarray,
-    background: Optional[float] = None,
+    background: float | None = None,
 ) -> np.ndarray:
     """Change to the specified viewport."""
     shape = (viewport[3] - viewport[1], viewport[2] - viewport[0], values.shape[2])
@@ -241,10 +245,10 @@ class Compositor(object):
     def __init__(
         self,
         viewport: tuple[int, int, int, int],
-        color: Union[float, tuple[float, ...], np.ndarray] = 1.0,
-        alpha: Union[float, np.ndarray] = 0.0,
+        color: float | tuple[float, ...] | np.ndarray = 1.0,
+        alpha: float | np.ndarray = 0.0,
         isolated: bool = False,
-        layer_filter: Optional[Callable] = None,
+        layer_filter: Callable | None = None,
         force: bool = False,
     ):
         self._viewport = viewport
@@ -503,9 +507,9 @@ class Compositor(object):
             compositor.apply(clip_layer, clip_compositing=True)
         return compositor._color
 
-    def _get_mask(self, layer: Layer) -> tuple[Union[float, np.ndarray], float]:
+    def _get_mask(self, layer: Layer) -> tuple[float | np.ndarray, float]:
         """Get mask attributes."""
-        shape: Union[float, np.ndarray] = 1.0
+        shape: float | np.ndarray = 1.0
         opacity: float = 1.0
         if layer.mask is not None and not layer.mask.disabled:
             # TODO: When force, ignore real mask.
