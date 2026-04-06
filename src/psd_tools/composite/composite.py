@@ -279,20 +279,20 @@ class Compositor(object):
         if self._layer_filter is not None and not self._layer_filter(layer):
             logger.debug("Ignore %s" % layer)
             return
-        if utils.intersect(self._viewport, layer.bbox) == (0, 0, 0, 0) and not isinstance(layer, AdjustmentLayer):
+        
+        is_empty_bbox = utils.intersect(self._viewport, layer.bbox) == (0, 0, 0, 0)
+        if is_empty_bbox and not (
+            isinstance(layer, AdjustmentLayer) or isinstance(layer, GroupMixin)
+        ):
             logger.debug("Out of viewport %s" % (layer))
             return
+        
         if not clip_compositing and layer.clipping:
             return
 
         knockout = bool(layer.tagged_blocks.get_data(Tag.KNOCKOUT_SETTING, 0))
         if isinstance(layer, AdjustmentLayer):
-            adjustment = ADJUSTMENT_FUNC.get(layer.kind)
-            colormode = self._get_colormode(layer)
-            if adjustment is None or colormode is None:
-                logger.debug("Ignore adjustment %s" % layer)
-                return
-            color, shape, alpha = self._get_adjustment(layer, adjustment, colormode)
+            color, shape, alpha = self._apply_adjustment(layer)
         elif isinstance(layer, GroupMixin):
             color, shape, alpha = self._get_group(layer, knockout)
         else:
@@ -399,7 +399,10 @@ class Compositor(object):
     def _get_group(
         self, layer: Layer, knockout: bool
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        viewport = utils.intersect(self._viewport, layer.bbox)
+        if layer.blend_mode == BlendMode.PASS_THROUGH:
+            viewport = self._viewport
+        else:
+            viewport = utils.intersect(self._viewport, layer.bbox)
         if knockout:
             color_b = self._color_0
             alpha_b = self._alpha_0
@@ -465,18 +468,26 @@ class Compositor(object):
         assert alpha is not None
         return color, shape, alpha
 
-    def _get_adjustment(
-        self, 
-        layer: AdjustmentLayer, 
-        adjustment_func: Callable,
-        colormode: Literal[ColorMode.CMYK, ColorMode.GRAYSCALE, ColorMode.RGB]
+    def _apply_adjustment(
+        self, layer: AdjustmentLayer, 
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        color = adjustment_func(layer, self._color, colormode)
-        shape = np.ones((self.height, self.width, 1), dtype=np.float32)
-        alpha = shape.copy()
-
-        return color, shape, alpha
+        adjustment = ADJUSTMENT_FUNC.get(layer.kind)
+        colormode = self._get_colormode(layer)
         
+        if adjustment is None or colormode is None:
+            logger.debug("Ignore adjustment %s" % layer)
+            color = self._color
+        else:
+            color = adjustment(layer, self._color, colormode)
+
+        shape = self._alpha.copy()
+        alpha = shape
+
+        assert color is not None
+        assert shape is not None
+        assert alpha is not None
+        return color, shape, alpha
+    
     def _apply_clip_layers(
         self, layer: Layer, color: np.ndarray, alpha: np.ndarray
     ) -> np.ndarray:
