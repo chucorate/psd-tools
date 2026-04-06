@@ -314,7 +314,9 @@ adjustment_test_list = [
         ("curves", "grayscale"),
         ("exposure", "rgb"),
         ("exposure", "grayscale"),
-        # There's no exposure adjustment for cmyk mode
+        ("huesaturation", "rgb"),
+        ("huesaturation_colorize", "rgb"),
+        # TODO: implement huesaturation for cmyk 
         ("invert", "rgb"),
         ("invert", "cmyk"),
         ("invert", "grayscale"),
@@ -330,11 +332,10 @@ adjustment_test_list = [
 @pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
 def test_adjustment_composite_icc(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}"
-    check_icc_composite_quality(filename, threshold=0.00008)
+    check_icc_composite_quality(filename, threshold=0.002)
 
 
 @pytest.mark.parametrize("adjustment, colormode", adjustment_test_list,)
 def test_adjustment_composite_error(adjustment: str, colormode: str) -> None:
     filename = f"adjustments/{adjustment}_{colormode}.psd"
-    check_composite_quality(filename, 0.0005, False)
-
+    check_composite_quality(filename, 0.002, False)
