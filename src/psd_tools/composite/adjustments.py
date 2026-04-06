@@ -330,17 +330,14 @@ def apply_threshold(
     trunc_function = np.round if size < 256 else np.floor
 
     threshold = (layer.threshold - 1) / 255.0 * size
-    luminance = trunc_function(_get_luminance(img, colormode) * size) 
+    if colormode == ColorMode.CMYK:
+        logger.info("Threshold isn't currently suported for CMYK.")
+        return img
     
+    luminance = trunc_function(_get_luminance(img, colormode) * size)
     filtered = (luminance > threshold).astype(np.float32) 
 
-    if colormode == ColorMode.CMYK:
-        h, w, _ = filtered.shape
-        out = np.ones((h, w, 4), dtype=np.float32)
-        out[..., 3:4] = 1.0 - filtered
-        return out
-    
-    elif colormode == ColorMode.RGB:
+    if colormode == ColorMode.RGB:
         out = np.repeat(filtered, 3, axis=2)
         return out
     
